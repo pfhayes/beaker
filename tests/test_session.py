@@ -46,7 +46,7 @@ def test_session():
         check_invalidate,
         check_timeout,
     ):
-      for session_getter in (get_session,):
+      for session_getter in (get_session, get_cookie_session,):
             setup_cookie_request()
             yield test_case, session_getter
 
@@ -377,6 +377,18 @@ def test_invalidate_empty_cookie():
     COOKIE_REQUEST['cookie_out'] = ' beaker.session.id='
     session = get_cookie_session(id=session.id, invalidate_corrupt=False, **kwargs)
     assert "foo" not in dict(session)
+
+
+@with_setup(setup_cookie_request)
+def test_unrelated_cookie():
+    kwargs = {'validate_key': 'test_key', 'encrypt_key': 'encrypt'}
+    session = get_cookie_session(**kwargs)
+    session['foo'] = 'bar'
+    session.save()
+
+    COOKIE_REQUEST['cookie_out'] = COOKIE_REQUEST['cookie_out'] + '; some.other=cookie'
+    session = get_cookie_session(id=session.id, invalidate_corrupt=False, **kwargs)
+    assert "foo" in dict(session)
 
 
 @with_setup(setup_cookie_request)
