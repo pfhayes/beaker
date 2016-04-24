@@ -172,7 +172,7 @@ class Session(dict):
             try:
                 self.load()
             except Exception as e:
-                if invalidate_corrupt:
+                if self.invalidate_corrupt:
                     util.warn(
                         "Invalidating corrupt session %s; "
                         "error was: %s.  Set invalidate_corrupt=False "
@@ -293,31 +293,16 @@ class Session(dict):
         """Bas64, decipher, then un-serialize the data for the session
         dict"""
         if self.encrypt_key:
-            try:
-                __, nonce_b64len = self.encrypt_nonce_size
-                nonce = session_data[:nonce_b64len]
-                encrypt_key = crypto.generateCryptoKeys(self.encrypt_key,
-                                                        self.validate_key + nonce, 1)
-                payload = b64decode(session_data[nonce_b64len:])
-                data = crypto.aesDecrypt(payload, encrypt_key)
-            except:
-                # As much as I hate a bare except, we get some insane errors
-                # here that get tossed when crypto fails, so we raise the
-                # 'right' exception
-                if self.invalidate_corrupt:
-                    return None
-                else:
-                    raise
+            __, nonce_b64len = self.encrypt_nonce_size
+            nonce = session_data[:nonce_b64len]
+            encrypt_key = crypto.generateCryptoKeys(self.encrypt_key,
+                                                    self.validate_key + nonce, 1)
+            payload = b64decode(session_data[nonce_b64len:])
+            data = crypto.aesDecrypt(payload, encrypt_key)
         else:
             data = b64decode(session_data)
 
-        try:
-            return self.serializer.loads(data)
-        except:
-            if self.invalidate_corrupt:
-                return None
-            else:
-                raise
+        return self.serializer.loads(data)
 
     def _delete_cookie(self):
         self.request['set_cookie'] = True
@@ -514,12 +499,19 @@ class CookieSession(Session):
     :param encrypt_key: The key to use for the local session encryption, if not
                         provided the session will not be encrypted.
     :param validate_key: The key used to sign the local encrypted session
+    :param invalidate_corrupt: How to handle corrupt data when loading. When
+                               set to True, then corrupt data will be silently
+                               invalidated and a new session created,
+                               otherwise invalid data will cause an exception.
+    :type invalidate_corrupt: bool
+
     """
     def __init__(self, request, key='beaker.session.id', timeout=None,
                  cookie_expires=True, cookie_domain=None, cookie_path='/',
                  encrypt_key=None, validate_key=None, secure=False,
                  httponly=False, data_serializer='pickle',
-                 encrypt_nonce_bits=DEFAULT_NONCE_BITS, **kwargs):
+                 encrypt_nonce_bits=DEFAULT_NONCE_BITS, invalidate_corrupt=False,
+                 **kwargs):
 
         if not crypto.has_aes and encrypt_key:
             raise InvalidCryptoBackendError("No AES library is installed, can't generate "
@@ -537,7 +529,7 @@ class CookieSession(Session):
         self.httponly = httponly
         self._domain = cookie_domain
         self._path = cookie_path
-
+        self.invalidate_corrupt = invalidate_corrupt
         self._set_serializer(data_serializer)
 
         try:
@@ -564,8 +556,15 @@ class CookieSession(Session):
                 cookie_data = self.cookie[self.key].value
                 self.update(self._decrypt_data(cookie_data))
                 self._path = self.get('_path', '/')
-            except:
-                pass
+            except Exception as e:
+                if self.invalidate_corrupt:
+                    util.warn(
+                        "Invalidating corrupt session %s; "
+                        "error was: %s.  Set invalidate_corrupt=False "
+                        "to propagate this exception." % (self.id, e))
+                    self.invalidate()
+                else:
+                    raise
 
             if self.timeout is not None:
                 now = time.time()
