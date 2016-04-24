@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from beaker._compat import u_, pickle
 
+import binascii
 import sys
 import time
 import warnings
@@ -8,7 +9,8 @@ import warnings
 from nose import SkipTest, with_setup
 
 from beaker.crypto import has_aes
-from beaker.session import CookieSession, Session, SignedCookie
+from beaker.exceptions import BeakerException
+from beaker.session import CookieSession, Session
 from beaker import util
 
 
@@ -29,12 +31,7 @@ def get_cookie_session(**kwargs):
     options = {'validate_key': 'test_key'}
     options.update(**kwargs)
     if COOKIE_REQUEST.get('set_cookie'):
-        cookie_out = COOKIE_REQUEST.get('cookie_out')
-        key = 'beaker.session.id'
-        cookie_out = cookie_out[cookie_out.index(key) + len(key) + 1:]
-        cookie_out = cookie_out[:cookie_out.index(';')]
-
-        COOKIE_REQUEST['cookie'] = {key: cookie_out}
+        COOKIE_REQUEST['cookie'] = COOKIE_REQUEST.get('cookie_out')
     return CookieSession(COOKIE_REQUEST, **options)
 
 
@@ -358,7 +355,7 @@ def test_invalidate_corrupt():
     f.close()
 
     util.assert_raises(
-        (pickle.UnpicklingError, EOFError, TypeError),
+        (pickle.UnpicklingError, EOFError, TypeError, binascii.Error),
         get_session,
         use_cookies=False, type='file',
                 data_dir='./cache', id=session.id
@@ -371,18 +368,38 @@ def test_invalidate_corrupt():
 
 
 @with_setup(setup_cookie_request)
-def test_invalidate_corrupt_cookie():
-    session = get_cookie_session()
+def test_invalidate_invalid_signed_cookie():
+    kwargs = {'validate_key': 'test_key', 'encrypt_key': 'encrypt'}
+    session = get_cookie_session(**kwargs)
     session['foo'] = 'bar'
     session.save()
 
-    COOKIE_REQUEST['cookie_out'] = ' beaker.session.id=fakecookie; Path=/'
-
-    util.assert_raises(
-        (pickle.UnpicklingError, EOFError, TypeError),
-        get_cookie_session,
-        id=session.id
+    COOKIE_REQUEST['cookie_out'] = (
+        COOKIE_REQUEST['cookie_out'][:20] +
+        'aaaaa' +
+        COOKIE_REQUEST['cookie_out'][25:]
     )
 
-    session = get_cookie_session(invalidate_corrupt=True, id=session.id)
+    util.assert_raises(
+        BeakerException,
+        get_cookie_session,
+        id=session.id,
+        invalidate_corrupt=False,
+    )
+
+
+@with_setup(setup_cookie_request)
+def test_invalidate_invalid_signed_cookie_invalidate_corrupt():
+    kwargs = {'validate_key': 'test_key', 'encrypt_key': 'encrypt'}
+    session = get_cookie_session(**kwargs)
+    session['foo'] = 'bar'
+    session.save()
+
+    COOKIE_REQUEST['cookie_out'] = (
+        COOKIE_REQUEST['cookie_out'][:20] +
+        'aaaaa' +
+        COOKIE_REQUEST['cookie_out'][25:]
+    )
+
+    session = get_cookie_session(id=session.id, invalidate_corrupt=True, **kwargs)
     assert "foo" not in dict(session)
