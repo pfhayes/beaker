@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 import sys
 
 # True if we are running on Python 2.
