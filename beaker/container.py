@@ -11,7 +11,7 @@ from beaker.synchronization import _threading, file_synchronizer, \
      mutex_synchronizer, NameLock, null_synchronizer
 
 __all__ = ['Value', 'Container', 'ContainerContext',
-           'MemoryContainer', 'DBMContainer', 'NamespaceManager',
+           'MemoryContainer', 'NamespaceManager',
            'MemoryNamespaceManager', 'FileContainer',
            'OpenResourceNamespaceManager',
            'FileNamespaceManager', 'CreationAbortedError']
@@ -627,6 +627,9 @@ class FileContainer(Container):
 
 class MemoryContainer(Container):
     namespace_class = MemoryNamespaceManager
+<<<<<<< HEAD
 
 
 DbmContainer = DBMContainer
+=======
+>>>>>>> 5ce9315... Remove more dbm
