@@ -1,5 +1,5 @@
 """Container and Namespace classes"""
-from ._compat import pickle, anydbm, add_metaclass, PYVER, unicode_text
+from ._compat import pickle, add_metaclass, PYVER, unicode_text
 
 import beaker.util as util
 import logging
@@ -12,7 +12,7 @@ from beaker.synchronization import _threading, file_synchronizer, \
 
 __all__ = ['Value', 'Container', 'ContainerContext',
            'MemoryContainer', 'DBMContainer', 'NamespaceManager',
-           'MemoryNamespaceManager', 'DBMNamespaceManager', 'FileContainer',
+           'MemoryNamespaceManager', 'FileContainer',
            'OpenResourceNamespaceManager',
            'FileNamespaceManager', 'CreationAbortedError']
 
@@ -493,118 +493,6 @@ class MemoryNamespaceManager(AbstractDictionaryNSManager):
                                 namespaces.get(self.namespace, dict)
 
 
-class DBMNamespaceManager(OpenResourceNamespaceManager):
-    """:class:`.NamespaceManager` that uses ``dbm`` files for storage."""
-
-    def __init__(self, namespace, dbmmodule=None, data_dir=None,
-            dbm_dir=None, lock_dir=None,
-            digest_filenames=True, **kwargs):
-        self.digest_filenames = digest_filenames
-
-        if not dbm_dir and not data_dir:
-            raise MissingCacheParameter("data_dir or dbm_dir is required")
-        elif dbm_dir:
-            self.dbm_dir = dbm_dir
-        else:
-            self.dbm_dir = data_dir + "/container_dbm"
-        util.verify_directory(self.dbm_dir)
-
-        if not lock_dir and not data_dir:
-            raise MissingCacheParameter("data_dir or lock_dir is required")
-        elif lock_dir:
-            self.lock_dir = lock_dir
-        else:
-            self.lock_dir = data_dir + "/container_dbm_lock"
-        util.verify_directory(self.lock_dir)
-
-        self.dbmmodule = dbmmodule or anydbm
-
-        self.dbm = None
-        OpenResourceNamespaceManager.__init__(self, namespace)
-
-        self.file = util.encoded_path(root=self.dbm_dir,
-                                      identifiers=[self.namespace],
-                                      extension='.dbm',
-                                      digest_filenames=self.digest_filenames)
-
-        debug("data file %s", self.file)
-        self._checkfile()
-
-    def get_access_lock(self):
-        return file_synchronizer(identifier=self.namespace,
-                                 lock_dir=self.lock_dir)
-
-    def get_creation_lock(self, key):
-        return file_synchronizer(
-                    identifier="dbmcontainer/funclock/%s/%s" % (
-                        self.namespace, key
-                    ),
-                    lock_dir=self.lock_dir
-                )
-
-    def file_exists(self, file):
-        if os.access(file, os.F_OK):
-            return True
-        else:
-            for ext in ('db', 'dat', 'pag', 'dir'):
-                if os.access(file + os.extsep + ext, os.F_OK):
-                    return True
-
-        return False
-
-    def _checkfile(self):
-        if not self.file_exists(self.file):
-            g = self.dbmmodule.open(self.file, 'c')
-            g.close()
-
-    def get_filenames(self):
-        list = []
-        if os.access(self.file, os.F_OK):
-            list.append(self.file)
-
-        for ext in ('pag', 'dir', 'db', 'dat'):
-            if os.access(self.file + os.extsep + ext, os.F_OK):
-                list.append(self.file + os.extsep + ext)
-        return list
-
-    def do_open(self, flags, replace):
-        debug("opening dbm file %s", self.file)
-        try:
-            self.dbm = self.dbmmodule.open(self.file, flags)
-        except:
-            self._checkfile()
-            self.dbm = self.dbmmodule.open(self.file, flags)
-
-    def do_close(self):
-        if self.dbm is not None:
-            debug("closing dbm file %s", self.file)
-            self.dbm.close()
-
-    def do_remove(self):
-        for f in self.get_filenames():
-            os.remove(f)
-
-    def __getitem__(self, key):
-        return pickle.loads(self.dbm[key])
-
-    def __contains__(self, key):
-        if PYVER == (3, 2):
-            # Looks like this is a bug that got solved in PY3.3 and PY3.4
-            # http://bugs.python.org/issue19288
-            if isinstance(key, unicode_text):
-                key = key.encode('UTF-8')
-        return key in self.dbm
-
-    def __setitem__(self, key, value):
-        self.dbm[key] = pickle.dumps(value)
-
-    def __delitem__(self, key):
-        del self.dbm[key]
-
-    def keys(self):
-        return self.dbm.keys()
-
-
 class FileNamespaceManager(OpenResourceNamespaceManager):
     """:class:`.NamespaceManager` that uses binary files for storage.
 
@@ -740,8 +628,5 @@ class FileContainer(Container):
 class MemoryContainer(Container):
     namespace_class = MemoryNamespaceManager
 
-
-class DBMContainer(Container):
-    namespace_class = DBMNamespaceManager
 
 DbmContainer = DBMContainer

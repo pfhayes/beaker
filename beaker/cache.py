@@ -117,7 +117,6 @@ class _backends(object):
 # Initialize the basic available backends
 clsmap = _backends({
           'memory': container.MemoryNamespaceManager,
-          'dbm': container.DBMNamespaceManager,
           'file': container.FileNamespaceManager,
           'ext:memcached': memcached.MemcachedNamespaceManager,
           'ext:database': database.DatabaseNamespaceManager,
