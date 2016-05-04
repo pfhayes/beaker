@@ -627,9 +627,3 @@ class FileContainer(Container):
 
 class MemoryContainer(Container):
     namespace_class = MemoryNamespaceManager
-<<<<<<< HEAD
-
-
-DbmContainer = DBMContainer
-=======
->>>>>>> 5ce9315... Remove more dbm
